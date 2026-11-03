@@ -3,10 +3,14 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# تثبيت ffmpeg و nodejs (ضروريين جداً ليوتيوب)
+# تثبيت ffmpeg وأدوات مساعدة
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg nodejs ca-certificates && \
+    apt-get install -y --no-install-recommends ffmpeg curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+
+# تثبيت أحدث إصدار من Node.js (مهم جداً لفك تشفير يوتيوب)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
 
 WORKDIR /app
 
