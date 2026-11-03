@@ -1169,9 +1169,10 @@ class MediaDownloader:
                     if is_youtube:
                         options["extractor_args"] = {
                             "youtube": {
-            "player_client": ["default", "web"]
+            # استخدام عملاء متعددين لتجاوز حظر السيرفرات
+            "player_client": ["default", "web", "ios", "tv_embedded"]
         }
-    }
+                        }
 
                     if "pinterest" in plat:
                         options["http_headers"]["Referer"] = "https://www.pinterest.com/"
