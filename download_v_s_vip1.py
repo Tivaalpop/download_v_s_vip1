@@ -1113,11 +1113,10 @@ class MediaDownloader:
 
         if is_youtube:
             quality_profiles = (
-                ("bestvideo+bestaudio/best", "أفضل جودة متاحة"),
-                ("bestvideo[height<=1080]+bestaudio/best", "جودة 1080p"),
-                ("bestvideo[height<=720]+bestaudio/best", "جودة 720p"),
-                ("best", "أفضل صيغة متاحة"),
-            )
+    ("bv*+ba/b", "أفضل جودة (فيديو وصوت)"),
+    ("bestvideo+bestaudio/best", "جودة عالية"),
+    ("best", "أفضل صيغة مدمجة"),
+)
         else:
             quality_profiles = (
                 ("bestvideo+bestaudio/best", "أفضل جودة متاحة"),
@@ -1170,14 +1169,9 @@ class MediaDownloader:
                     if is_youtube:
                         options["extractor_args"] = {
                             "youtube": {
-                                "player_client": [
-                                    "ios",
-                                    "android",
-                                    "tv_embedded",
-                                    "mweb",
-                                ]
-                            }
-                        }
+            "player_client": ["default", "web"]
+        }
+    }
 
                     if "pinterest" in plat:
                         options["http_headers"]["Referer"] = "https://www.pinterest.com/"
