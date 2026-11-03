@@ -15,6 +15,8 @@
 
 📦 المكتبات المطلوبة للتشغيل (قم بتثبيتها عبر الأمر التالي في التيرمينال):
     pip install -U python-telegram-bot yt-dlp httpx requests
+    ⚠️ مهم جداً: حدّث yt-dlp باستمرار (pip install -U yt-dlp) وثبّت Node.js أو Deno على السيرفر،
+       لأن يوتيوب وانستجرام يتطلبان JS runtime وإصداراً حديثاً باستمرار.
     (اختياري لدعم رفع الملفات الأكبر من 50MB حتى 2GB):
     pip install -U pyrogram tgcrypto
     (تأكد أيضاً من وجود برنامج ffmpeg مثبتاً على السيرفر لمعالجة الصوتيات والفيديو)
@@ -73,8 +75,10 @@ from telegram.request import HTTPXRequest
 # 📌 الإعدادات الأساسية (ضع التوكن والـ ID الخاص بك هنا)
 # ═══════════════════════════════════════════════════════════════════════
 
+# الأفضل وضع التوكن كمتغير بيئة BOT_TOKEN (والـ Admin ID في ADMIN_ID) بدلاً من كتابته هنا.
 TOKEN = os.environ.get("BOT_TOKEN", "ضع_التوكن_هنا")
 ADMIN_ID = os.environ.get("ADMIN_ID", "ضع_الايدي_هنا")
+
 
 # إعدادات قناة الاشتراك الإجباري
 FORCE_SUB_CHANNEL_URL = "https://t.me/Ell_Hoot"
@@ -1107,149 +1111,153 @@ class MediaDownloader:
     def download_media(
         cls, url: str, mode: str = "video"
     ) -> tuple[Path, dict[str, str], Path | None]:
-        """تحميل الفيديو أو الصوت عبر yt-dlp مع دعم تعدد الجودات والكوكيز."""
+        """تحميل الفيديو أو الصوت عبر yt-dlp بإعدادات مُثبتة عملياً على كل المنصات."""
         plat = platform_name(url).lower()
-        is_youtube = "youtube" in plat
 
-        if is_youtube:
-            quality_profiles = (
-    ("bv*+ba/b", "أفضل جودة (فيديو وصوت)"),
-    ("bestvideo+bestaudio/best", "جودة عالية"),
-    ("best", "أفضل صيغة مدمجة"),
-)
-        else:
-            quality_profiles = (
-                ("bestvideo+bestaudio/best", "أفضل جودة متاحة"),
-                ("bestvideo[height<=1080]+bestaudio/best[height<=1080]/best", "جودة 1080p"),
-                ("bestvideo[height<=720]+bestaudio/best[height<=720]/best", "جودة 720p"),
-                ("best", "أفضل صيغة متاحة"),
+        # سلسلة جودات مُثبتة عملياً: نفضّل MP4 لتفادي مشاكل الدمج، ثم ننزل تدريجياً
+        quality_profiles: list[tuple[str, str]] = [
+            ("bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "أفضل جودة متاحة"),
+            ("bestvideo[height<=1080]+bestaudio/best[height<=1080]/best", "جودة 1080p"),
+            ("bestvideo[height<=720]+bestaudio/best[height<=720]/best", "جودة 720p"),
+            ("best", "أفضل صيغة متاحة"),
+        ]
+        if "instagram" in plat:
+            # انستجرام يعمل بشكل أفضل مع أبسط اختيار صيغة (مثبت عملياً)
+            quality_profiles.insert(0, ("best", "أفضل جودة متاحة (مبسّطة)"))
+
+        # لليوتيوب: محاولة أولى بإعدادات yt-dlp الافتراضية الحديثة،
+        # وعند الفشل نعيد المحاولة بعملاء بدائل (tv_embedded/mweb) — كما توصي أحدث التوثيقات
+        youtube_client_passes: list[dict[str, Any] | None] = [None]
+        if "youtube" in plat:
+            youtube_client_passes.append(
+                {"youtube": {"player_client": ["tv_embedded", "mweb"]}}
             )
 
         with tempfile.TemporaryDirectory(prefix="tg-dl-") as temp_dir:
             directory = Path(temp_dir)
             last_error: Exception | None = None
 
-            for format_selector, quality_label in quality_profiles:
-                try:
-                    if mode == "audio":
-                        format_selector = "bestaudio/best"
+            for extractor_args in youtube_client_passes:
+                for format_selector, quality_label in quality_profiles:
+                    try:
+                        if mode == "audio":
+                            format_selector = "bestaudio/best"
 
-                    output_template = str(directory / "%(title).80s-%(id)s.%(ext)s")
-                    options: dict[str, Any] = {
-                        "format": format_selector,
-                        "outtmpl": output_template,
-                        "merge_output_format": "mp4",
-                        "noplaylist": True,
-                        "quiet": True,
-                        "no_warnings": True,
-                        "retries": 8,
-                        "fragment_retries": 8,
-                        "extractor_retries": 4,
-                        "concurrent_fragment_downloads": 16,
-                        "buffersize": 16 * 1024 * 1024,
-                        "http_chunk_size": 10 * 1024 * 1024,
-                        "file_access_retries": 5,
-                        "socket_timeout": 30,
-                        "continuedl": True,
-                        "writethumbnail": True,
-                        "sleep_interval": 0,
-                        "sleep_interval_requests": 0,
-                        "restrictfilenames": True,
-                        "overwrites": True,
-                        "geo_bypass": True,
-                        "http_headers": {
-                            "User-Agent": (
-                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                "Chrome/131.0.0.0 Safari/537.36"
-                            )
-                        },
-                    }
+                        output_template = str(directory / "%(title).80s-%(id)s.%(ext)s")
+                        options: dict[str, Any] = {
+                            "format": format_selector,
+                            "outtmpl": output_template,
+                            "merge_output_format": "mp4",
+                            "noplaylist": True,
+                            "quiet": True,
+                            "no_warnings": True,
+                            "retries": 10,
+                            "fragment_retries": 10,
+                            "extractor_retries": 5,
+                            "skip_unavailable_fragments": True,
+                            "concurrent_fragment_downloads": 16,
+                            "buffersize": 16 * 1024 * 1024,
+                            "http_chunk_size": 10 * 1024 * 1024,
+                            "file_access_retries": 5,
+                            "socket_timeout": 30,
+                            "continuedl": True,
+                            "writethumbnail": True,
+                            "sleep_interval": 0,
+                            "sleep_interval_requests": 0,
+                            "restrictfilenames": True,
+                            "overwrites": True,
+                            "geo_bypass": True,
+                            "nocheckcertificate": True,
+                        }
 
-                    if is_youtube:
-                        options["extractor_args"] = {
-                            "youtube": {
-            # استخدام عملاء متعددين لتجاوز حظر السيرفرات
-            "player_client": ["default", "web", "ios", "tv_embedded"]
-        }
-    }
+                        if extractor_args is not None:
+                            options["extractor_args"] = extractor_args
 
-                    if "pinterest" in plat:
-                        options["http_headers"]["Referer"] = "https://www.pinterest.com/"
-
-                    # فحص ما إذا كان هناك ملف كوكيز مرفوع لهذه المنصة
-                    for key, cookie_file in PLATFORM_COOKIES.items():
-                        if (key in plat or plat in key) and cookie_file.is_file():
-                            options["cookiefile"] = str(cookie_file)
-                            break
-
-                    if mode == "audio":
-                        options["postprocessors"] = [
-                            {
-                                "key": "FFmpegExtractAudio",
-                                "preferredcodec": "mp3",
-                                "preferredquality": "192",
+                        if "pinterest" in plat:
+                            options["http_headers"] = {
+                                "Referer": "https://www.pinterest.com/"
                             }
+
+                        # فحص ملف الكوكيز المرفوع لهذه المنصة (ضروري جداً لانستجرام واليوتيوب)
+                        for key, cookie_file in PLATFORM_COOKIES.items():
+                            if (key in plat or plat in key) and cookie_file.is_file():
+                                options["cookiefile"] = str(cookie_file)
+                                break
+
+                        if mode == "audio":
+                            options["postprocessors"] = [
+                                {
+                                    "key": "FFmpegExtractAudio",
+                                    "preferredcodec": "mp3",
+                                    "preferredquality": "192",
+                                }
+                            ]
+
+                        with yt_dlp.YoutubeDL(options) as downloader:
+                            info = downloader.extract_info(url, download=True)
+                            if not isinstance(info, dict):
+                                raise RuntimeError("لم يُرجع المصدر بيانات صالحة.")
+
+                        candidates = [
+                            path
+                            for path in directory.iterdir()
+                            if path.is_file()
+                            and path.suffix.lower()
+                            not in {".part", ".ytdl", ".jpg", ".jpeg", ".png", ".webp", ".json"}
                         ]
+                        if not candidates:
+                            raise RuntimeError("لم يتم إنشاء ملف الوسائط بعد التحميل.")
 
-                    with yt_dlp.YoutubeDL(options) as downloader:
-                        info = downloader.extract_info(url, download=True)
-                        if not isinstance(info, dict):
-                            raise RuntimeError("لم يُرجع المصدر بيانات صالحة.")
-
-                    candidates = [
-                        path
-                        for path in directory.iterdir()
-                        if path.is_file()
-                        and path.suffix.lower()
-                        not in {".part", ".ytdl", ".jpg", ".jpeg", ".png", ".webp", ".json"}
-                    ]
-                    if not candidates:
-                        raise RuntimeError("لم يتم إنشاء ملف الوسائط بعد التحميل.")
-
-                    media_path = max(candidates, key=lambda p: p.stat().st_mtime)
-                    logger.info(
-                        "Downloaded %s (%s, %.1f MB)",
-                        info.get("title") or "media",
-                        quality_label,
-                        media_path.stat().st_size / 1024 / 1024,
-                    )
-
-                    fd, persistent_name = tempfile.mkstemp(suffix=media_path.suffix)
-                    os.close(fd)
-                    persistent_path = Path(persistent_name)
-                    shutil.copy2(media_path, persistent_path)
-
-                    metadata = cls.source_metadata(info, persistent_path)
-
-                    # تجهيز الغلاف المصغر إن وجد
-                    persistent_cover: Path | None = None
-                    cover_candidates = [
-                        path
-                        for path in directory.iterdir()
-                        if path.is_file()
-                        and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
-                    ]
-                    if cover_candidates:
-                        cover_path = cls.convert_cover_to_jpeg(
-                            max(cover_candidates, key=lambda p: p.stat().st_mtime),
-                            directory,
+                        media_path = max(candidates, key=lambda p: p.stat().st_mtime)
+                        logger.info(
+                            "Downloaded %s (%s, %.1f MB)",
+                            info.get("title") or "media",
+                            quality_label,
+                            media_path.stat().st_size / 1024 / 1024,
                         )
-                        if cover_path is not None:
-                            cfd, cover_name = tempfile.mkstemp(suffix=".jpg")
-                            os.close(cfd)
-                            persistent_cover = Path(cover_name)
-                            shutil.copy2(cover_path, persistent_cover)
 
-                    return persistent_path, metadata, persistent_cover
+                        fd, persistent_name = tempfile.mkstemp(suffix=media_path.suffix)
+                        os.close(fd)
+                        persistent_path = Path(persistent_name)
+                        shutil.copy2(media_path, persistent_path)
 
-                except Exception as error:
-                    last_error = error
-                    logger.warning("Download profile (%s) failed: %s", quality_label, error)
-                    for old_file in directory.iterdir():
-                        old_file.unlink(missing_ok=True)
-                    if mode == "audio":
-                        break
+                        metadata = cls.source_metadata(info, persistent_path)
+
+                        # تجهيز الغلاف المصغر إن وجد
+                        persistent_cover: Path | None = None
+                        cover_candidates = [
+                            path
+                            for path in directory.iterdir()
+                            if path.is_file()
+                            and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+                        ]
+                        if cover_candidates:
+                            cover_path = cls.convert_cover_to_jpeg(
+                                max(cover_candidates, key=lambda p: p.stat().st_mtime),
+                                directory,
+                            )
+                            if cover_path is not None:
+                                cfd, cover_name = tempfile.mkstemp(suffix=".jpg")
+                                os.close(cfd)
+                                persistent_cover = Path(cover_name)
+                                shutil.copy2(cover_path, persistent_cover)
+
+                        return persistent_path, metadata, persistent_cover
+
+                    except Exception as error:
+                        last_error = error
+                        logger.warning(
+                            "Download (%s, client=%s) failed: %s",
+                            quality_label,
+                            extractor_args,
+                            error,
+                        )
+                        for old_file in directory.iterdir():
+                            old_file.unlink(missing_ok=True)
+                        if mode == "audio":
+                            break
+                if mode == "audio":
+                    break
 
             if last_error is not None:
                 raise last_error
@@ -1591,10 +1599,23 @@ async def send_downloaded_media(
     except Exception as error:
         logger.exception("Error downloading URL %s: %s", url, error)
         await delete_loading()
+        plat_hint = platform_name(url).lower()
+        extra_hint = ""
+        if "instagram" in plat_hint:
+            extra_hint = (
+                "\n• 🍪 انستجرام يحتاج كوكيز حساب: على الأدمن رفعها من "
+                "«لوحة التحكم ← إدارة الكوكيز»."
+            )
+        elif "youtube" in plat_hint:
+            extra_hint = (
+                "\n• 🛠️ يوتيوب: حدّث المكتبة على السيرفر "
+                "(<code>pip install -U yt-dlp</code>) وتأكد من تثبيت Node.js أو Deno."
+            )
         await message.reply_text(
             "❌ <b>عذراً، تعذّر تحميل هذا الرابط!</b>\n\n"
             "• تأكد من أن الرابط عام وليس خاصاً (Private).\n"
-            "• تأكد من صحة الرابط وأن الفيديو لم يُحذف من المنصة.\n"
+            "• تأكد من صحة الرابط وأن الفيديو لم يُحذف من المنصة."
+            f"{extra_hint}\n"
             "• إذا كانت المشكلة مستمرة، يمكنك مراسلة الإدارة من القائمة الرئيسية.",
             parse_mode=ParseMode.HTML,
             reply_markup=back_and_home_keyboard("menu_home"),
@@ -3143,6 +3164,24 @@ def build_and_run_bot() -> None:
             "❌ خطأ: يرجى وضع توكن البوت الصحيح في المتغير TOKEN أعلى ملف bot.py قبل التشغيل!"
         )
         sys.exit(1)
+
+    # فحص إصدار yt-dlp وتنبيه عند الحاجة للتحديث (السبب الأول لفشل اليوتيوب)
+    try:
+        import yt_dlp.version as _ydl_version
+
+        logger.info(
+            "إصدار yt-dlp المثبت: %s — إذا كان قديماً حدّثه: pip install -U yt-dlp",
+            _ydl_version.__version__,
+        )
+    except Exception:
+        pass
+
+    # اليوتيوب وانستجرام يحتاجان JS runtime حديثاً — ننبه إن لم يكن مثبتاً
+    if not (shutil.which("node") or shutil.which("deno")):
+        logger.warning(
+            "⚠️ لم يُعثر على Node.js أو Deno على السيرفر — "
+            "يوتيوب قد يفشل بدون JS runtime. ثبّت أحدهما ثم أعد التشغيل."
+        )
 
     request = HTTPXRequest(
         connection_pool_size=32,
