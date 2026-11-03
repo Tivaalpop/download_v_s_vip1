@@ -73,8 +73,8 @@ from telegram.request import HTTPXRequest
 # 📌 الإعدادات الأساسية (ضع التوكن والـ ID الخاص بك هنا)
 # ═══════════════════════════════════════════════════════════════════════
 
-TOKEN = "8853263450:AAFInewWao0Fr3V49koepB2bJxFyIwCaWJk"
-ADMIN_ID = "1444139300"
+TOKEN = os.environ.get("BOT_TOKEN", "ضع_التوكن_هنا")
+ADMIN_ID = os.environ.get("ADMIN_ID", "ضع_الايدي_هنا")
 
 # إعدادات قناة الاشتراك الإجباري
 FORCE_SUB_CHANNEL_URL = "https://t.me/Ell_Hoot"
