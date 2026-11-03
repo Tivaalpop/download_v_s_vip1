@@ -73,8 +73,8 @@ from telegram.request import HTTPXRequest
 # 📌 الإعدادات الأساسية (ضع التوكن والـ ID الخاص بك هنا)
 # ═══════════════════════════════════════════════════════════════════════
 
-TOKEN = os.environ.get("BOT_TOKEN", "ضع_التوكن_هنا")
-ADMIN_ID = os.environ.get("ADMIN_ID", "ضع_الايدي_هنا")
+TOKEN = os.getenv("BOT_TOKEN", "").strip()
+ADMIN_ID = os.getenv("ADMIN_ID", "1444139300").strip()
 
 # إعدادات قناة الاشتراك الإجباري
 FORCE_SUB_CHANNEL_URL = "https://t.me/Ell_Hoot"
@@ -1112,11 +1112,14 @@ class MediaDownloader:
         is_youtube = "youtube" in plat
 
         if is_youtube:
+            # لا نفرض player_client محدداً؛ yt-dlp يختار العملاء المتاحين
+            # ويتجنب ذلك حصر النتائج في صيغ لا يوفرها يوتيوب لهذا الفيديو.
             quality_profiles = (
-    ("bv*+ba/b", "أفضل جودة (فيديو وصوت)"),
-    ("bestvideo+bestaudio/best", "جودة عالية"),
-    ("best", "أفضل صيغة مدمجة"),
-)
+                ("bestvideo*+bestaudio/best", "أفضل جودة متاحة"),
+                ("best[height<=1080]/best", "جودة تصل إلى 1080p"),
+                ("best[height<=720]/best", "جودة تصل إلى 720p"),
+                ("best", "أفضل صيغة متاحة"),
+            )
         else:
             quality_profiles = (
                 ("bestvideo+bestaudio/best", "أفضل جودة متاحة"),
@@ -1165,14 +1168,6 @@ class MediaDownloader:
                             )
                         },
                     }
-
-                    if is_youtube:
-                        options["extractor_args"] = {
-                            "youtube": {
-            # استخدام عملاء متعددين لتجاوز حظر السيرفرات
-            "player_client": ["default", "web", "ios", "tv_embedded"]
-        }
-                        }
 
                     if "pinterest" in plat:
                         options["http_headers"]["Referer"] = "https://www.pinterest.com/"
@@ -3140,7 +3135,7 @@ def build_and_run_bot() -> None:
     """بناء تطبيق البوت وربط جميع الأوامر والأزرار وتشغيل الـ Polling."""
     if not TOKEN or TOKEN == "ضع_التوكن_هنا":
         logger.error(
-            "❌ خطأ: يرجى وضع توكن البوت الصحيح في المتغير TOKEN أعلى ملف bot.py قبل التشغيل!"
+            "❌ BOT_TOKEN غير مضبوط. أضف توكن البوت كمتغير بيئة BOT_TOKEN في إعدادات الاستضافة."
         )
         sys.exit(1)
 
@@ -3229,7 +3224,7 @@ def build_and_run_bot() -> None:
     except Exception:
         pass
 
-    logger.info("✅ البوت يعمل الآن وجاهز لاستقبال الطلبات...")
+    logger.info("بدء تشغيل Telegram polling...")
     application.run_polling(
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True,
