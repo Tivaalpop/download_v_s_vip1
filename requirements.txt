@@ -1,6 +1,7 @@
-python-telegram-bot>=20.0
-yt-dlp>=2024.10.0
-httpx>=0.24.0
-requests>=2.31.0
-pyrogram>=2.0.106
-tgcrypto>=1.2.5
+python-telegram-bot
+yt-dlp[default]
+gallery-dl
+httpx
+requests
+flask
+gunicorn
